@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+build_env/
+*.spec.bak
+.DS_Store
+Thumbs.db
+*.mp3
+.downloaded.txt
+aria2-1.37.0-win-64bit-build1/
+aria2.zip
+aria2c.zip
+Audio Original/
+Audio Original - Copy/
+Backup/
+all_files.txt

@@ -1,0 +1,43 @@
+name: Build macOS App
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:        # allows manual trigger from GitHub UI
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build .app with PyInstaller
+        run: pyinstaller yt_strip.spec --noconfirm
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "YT Strip" \
+            -srcfolder "dist/YT Strip.app" \
+            -ov -format UDZO \
+            "dist/YT-Strip.dmg"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YT-Strip-macOS
+          path: dist/YT-Strip.dmg
