@@ -6,6 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 from . import downloader
 
@@ -15,7 +16,7 @@ class App:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("YT Strip")
+        self.root.title("Liisa is a pirate")
         self.root.geometry("900x680")
         self.root.minsize(780, 520)
 
@@ -68,11 +69,7 @@ class App:
         self.content_frame = ttk.Frame(main)
         self.content_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        self._placeholder = ttk.Label(
-            self.content_frame,
-            text="Paste a YouTube video or playlist URL above and click Fetch",
-            foreground="gray")
-        self._placeholder.pack(expand=True)
+        self._show_unicorn_splash()
 
         # --- Progress ---
         progress_frame = ttk.Frame(main)
@@ -89,6 +86,115 @@ class App:
     # ------------------------------------------------------------------
     # Single-video view
     # ------------------------------------------------------------------
+
+    def _show_unicorn_splash(self):
+        """Draw a pirate-unicorn splash in the content area."""
+        c = tk.Canvas(self.content_frame, highlightthickness=0, bg='#f0e6ff')
+        c.pack(fill=tk.BOTH, expand=True)
+
+        def _draw(event=None):
+            c.delete('u')
+            w, h = c.winfo_width(), c.winfo_height()
+            if w < 10 or h < 10:
+                return
+            cx, cy = w // 2, h // 2
+            s = min(w, h) / 420          # scale factor
+
+            # --- HEAD (front view, rounded) ---
+            c.create_oval(cx - 95*s, cy - 75*s, cx + 95*s, cy + 105*s,
+                          fill='#f8e8ff', outline='#c890e0', width=2*s, tags='u')
+
+            # --- SNOUT / MUZZLE ---
+            c.create_oval(cx - 50*s, cy + 45*s, cx + 50*s, cy + 125*s,
+                          fill='#ffe4f0', outline='#c890e0', width=2*s, tags='u')
+            # nostrils
+            c.create_oval(cx - 16*s, cy + 78*s, cx - 6*s, cy + 90*s,
+                          fill='#e0b0c8', outline='', tags='u')
+            c.create_oval(cx + 6*s, cy + 78*s, cx + 16*s, cy + 90*s,
+                          fill='#e0b0c8', outline='', tags='u')
+
+            # --- SMILE ---
+            c.create_arc(cx - 28*s, cy + 55*s, cx + 28*s, cy + 100*s,
+                         start=200, extent=140, style=tk.ARC,
+                         outline='#c890e0', width=2*s, tags='u')
+
+            # --- HORN (golden, spiraled) ---
+            c.create_polygon(cx - 14*s, cy - 72*s,
+                             cx,        cy - 175*s,
+                             cx + 14*s, cy - 72*s,
+                             fill='#ffd700', outline='#daa520', width=2*s,
+                             smooth=False, tags='u')
+            for i in range(5):
+                yy = cy - 82*s - i * 18*s
+                c.create_line(cx - 11*s + i*2*s, yy,
+                              cx + 11*s - i*2*s, yy,
+                              fill='#daa520', width=max(1, 1.2*s), tags='u')
+
+            # --- EARS ---
+            # left ear
+            c.create_polygon(cx - 60*s, cy - 55*s,
+                             cx - 80*s, cy - 115*s,
+                             cx - 40*s, cy - 70*s,
+                             fill='#ffe4f0', outline='#c890e0', width=2*s, tags='u')
+            # right ear
+            c.create_polygon(cx + 60*s, cy - 55*s,
+                             cx + 80*s, cy - 115*s,
+                             cx + 40*s, cy - 70*s,
+                             fill='#ffe4f0', outline='#c890e0', width=2*s, tags='u')
+
+            # --- RIGHT EYE (cute, visible) ---
+            c.create_oval(cx + 18*s, cy - 30*s, cx + 62*s, cy + 14*s,
+                          fill='white', outline='#555', width=2*s, tags='u')
+            c.create_oval(cx + 28*s, cy - 18*s, cx + 52*s, cy + 6*s,
+                          fill='#7b68ee', outline='#5b48ce', width=1, tags='u')
+            c.create_oval(cx + 33*s, cy - 12*s, cx + 47*s, cy + 0*s,
+                          fill='black', outline='', tags='u')
+            # sparkle
+            c.create_oval(cx + 35*s, cy - 22*s, cx + 41*s, cy - 16*s,
+                          fill='white', outline='', tags='u')
+            c.create_oval(cx + 46*s, cy - 8*s, cx + 50*s, cy - 4*s,
+                          fill='white', outline='', tags='u')
+
+            # --- LEFT EYE AREA — EYEPATCH! ---
+            c.create_oval(cx - 62*s, cy - 32*s, cx - 14*s, cy + 16*s,
+                          fill='#1a1a1a', outline='#000', width=2*s, tags='u')
+            # skull on eyepatch
+            c.create_oval(cx - 48*s, cy - 18*s, cx - 28*s, cy + 0*s,
+                          fill='#ddd', outline='', tags='u')
+            c.create_line(cx - 44*s, cy + 0*s, cx - 32*s, cy + 8*s,
+                          fill='#ddd', width=2*s, tags='u')
+            c.create_line(cx - 44*s, cy + 8*s, cx - 32*s, cy + 0*s,
+                          fill='#ddd', width=2*s, tags='u')
+            # strap going over/around the head
+            c.create_line(cx - 56*s, cy - 20*s,
+                          cx - 45*s, cy - 65*s,
+                          cx,        cy - 72*s,
+                          fill='#1a1a1a', width=3.5*s, smooth=True, tags='u')
+            c.create_line(cx - 20*s, cy + 10*s,
+                          cx + 15*s, cy + 45*s,
+                          cx + 55*s, cy + 30*s,
+                          fill='#1a1a1a', width=3.5*s, smooth=True, tags='u')
+
+            # --- MANE (rainbow, flowing to the right) ---
+            colors = ['#ff6b6b', '#ff9f43', '#feca57',
+                      '#48dbfb', '#7b68ee', '#e056a0']
+            for i, clr in enumerate(colors):
+                ox = i * 14 * s
+                c.create_line(
+                    cx + 85*s + ox, cy - 60*s + i*8*s,
+                    cx + 120*s + ox, cy - 90*s + i*6*s,
+                    cx + 155*s + ox, cy - 40*s + i*10*s,
+                    cx + 170*s + ox, cy + 20*s + i*10*s,
+                    fill=clr, width=5*s, smooth=True,
+                    capstyle=tk.ROUND, tags='u')
+
+            # --- CAPTION ---
+            c.create_text(cx, cy + 155*s,
+                          text="Paste a YouTube URL above and click Fetch",
+                          fill='#9070b0', font=("TkDefaultFont", max(10, int(11*s))),
+                          tags='u')
+
+        c.bind('<Configure>', _draw)
 
     def _build_single_view(self, info):
         frame = ttk.LabelFrame(self.content_frame, text="Track Info", padding=12)
@@ -261,10 +367,39 @@ class App:
         if d:
             self.output_var.set(d)
 
+    def _resolve_url(self, url):
+        """If URL has both a video ID and a playlist ID, ask the user which they want."""
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+        except Exception:
+            return url
+
+        has_video = 'v' in params and params['v'][0]
+        has_playlist = 'list' in params and params['list'][0]
+
+        if has_video and has_playlist:
+            choice = messagebox.askyesnocancel(
+                "Video or Playlist?",
+                "This URL contains both a single video and a playlist.\n\n"
+                "Yes  =  download just this one song\n"
+                "No   =  download the entire playlist\n"
+                "Cancel  =  go back")
+            if choice is None:
+                return None          # user cancelled
+            if choice:
+                return f"https://www.youtube.com/watch?v={params['v'][0]}"
+            # else: keep full URL for playlist
+        return url
+
     def _on_fetch(self):
         url = self.url_var.get().strip()
         if not url:
             messagebox.showwarning("No URL", "Please enter a YouTube URL.")
+            return
+
+        url = self._resolve_url(url)
+        if url is None:
             return
 
         self.fetch_btn.config(state=tk.DISABLED)
