@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from . import downloader
+from . import updater
 
 
 class App:
@@ -82,6 +83,23 @@ class App:
 
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(progress_frame, textvariable=self.status_var).pack(anchor=tk.W)
+
+        # --- yt-dlp version / update ---
+        update_frame = ttk.Frame(main)
+        update_frame.pack(fill=tk.X, pady=(6, 0))
+
+        self.version_var = tk.StringVar(
+            value=f"yt-dlp {updater.get_installed_version()}")
+        ttk.Label(update_frame, textvariable=self.version_var,
+                  foreground='gray').pack(side=tk.LEFT)
+
+        self.update_btn = ttk.Button(
+            update_frame, text="Check for updates",
+            command=self._on_update_ytdlp)
+        self.update_btn.pack(side=tk.RIGHT)
+
+        # Background check for updates
+        self._check_for_updates()
 
     # ------------------------------------------------------------------
     # Single-video view
@@ -565,6 +583,57 @@ class App:
                 "  Windows: winget install ffmpeg\n"
                 "  Linux:   sudo apt install ffmpeg\n\n"
                 "Then restart YT Strip.")
+
+    # ------------------------------------------------------------------
+    # yt-dlp update
+    # ------------------------------------------------------------------
+
+    def _check_for_updates(self):
+        """Background check for yt-dlp updates on startup."""
+        def _work():
+            try:
+                available, current, latest = updater.needs_update()
+                if available:
+                    self.root.after(0, lambda: self._show_update_available(latest))
+            except Exception:
+                pass  # silent — don't bother user on startup
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _show_update_available(self, latest):
+        self.update_btn.config(text=f"Update yt-dlp to {latest}")
+        self.version_var.set(
+            f"yt-dlp {updater.get_installed_version()} (update available)")
+
+    def _on_update_ytdlp(self):
+        self.update_btn.config(state=tk.DISABLED, text="Updating...")
+
+        def _progress(msg):
+            self.root.after(0, lambda: self.version_var.set(msg))
+
+        def _work():
+            try:
+                new_ver = updater.update_ytdlp(progress_callback=_progress)
+                self.root.after(0, lambda: self._update_done(True, new_ver))
+            except Exception as e:
+                self.root.after(0, lambda: self._update_done(False, str(e)))
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _update_done(self, success, detail):
+        self.update_btn.config(state=tk.NORMAL)
+        if success:
+            self.version_var.set(f"yt-dlp {detail} (restart app to use)")
+            self.update_btn.config(text="Updated")
+            messagebox.showinfo(
+                "Update Complete",
+                f"yt-dlp updated to {detail}.\n\n"
+                "Restart YT Strip to use the new version.")
+        else:
+            self.version_var.set(
+                f"yt-dlp {updater.get_installed_version()} (update failed)")
+            self.update_btn.config(text="Retry update")
+            messagebox.showerror("Update Failed", f"Could not update yt-dlp:\n\n{detail}")
 
     # ------------------------------------------------------------------
     # Main loop
