@@ -298,12 +298,16 @@ class TestYtdlpHealth:
 
     def test_ytdlp_version_not_ancient(self):
         """Warn if yt-dlp is more than ~6 months old (YouTube breaks old versions)."""
+        from datetime import date, timedelta
         import yt_dlp
+
         version = yt_dlp.version.__version__  # e.g. "2026.03.13"
-        parts = version.split(".")
-        year = int(parts[0])
-        # If the yt-dlp release year is more than 1 behind, it's likely broken
-        assert year >= 2025, (
-            f"yt-dlp version {version} is very old — YouTube extraction "
-            f"will likely fail. Run: pip install -U yt-dlp"
+        year, month, day = (int(part) for part in version.split(".")[:3])
+        release_date = date(year, month, day)
+        cutoff = date.today() - timedelta(days=183)
+
+        assert release_date >= cutoff, (
+            f"yt-dlp version {version} is more than six months old — YouTube "
+            f"extraction and signature/counter stripping may fail. Run: "
+            f"pip install -U yt-dlp"
         )
