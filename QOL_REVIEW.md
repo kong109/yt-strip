@@ -2,13 +2,13 @@
 
 ## Summary
 
-YT Strip already has a focused GUI, playlist support, metadata editing, a macOS build workflow, and regression tests for the downloader/updater. The highest-impact QOL work now is to make first-run setup and failed downloads easier for non-developers to understand and recover from.
+YT Strip already has a focused GUI, playlist support, metadata editing, user-facing setup documentation, a macOS build workflow, and regression tests for the downloader/updater. The highest-impact QOL work now is to make failed downloads easier for non-developers to understand and recover from.
 
 ## Recommended next improvements
 
-1. **Replace the placeholder README with user-facing docs**
-   - The current `readme.MD` describes a different app.
-   - Add install/run instructions, supported platforms, ffmpeg setup, common errors, and screenshots/GIFs of the fetch/edit/download flow.
+1. **Keep the user-facing README current**
+   - `readme.MD` describes the current app and covers installation, running, supported platforms, ffmpeg setup, and common errors.
+   - Add screenshots/GIFs of the fetch/edit/download flow.
 
 2. **Surface actionable download errors in the GUI**
    - Download failures currently bubble up as raw exception text.
@@ -36,4 +36,4 @@ YT Strip already has a focused GUI, playlist support, metadata editing, a macOS 
 
 ## Suggested order
 
-Start with the README and friendly error handling because those reduce support burden immediately. Then add preference persistence and overwrite safeguards, which improve everyday use without changing the core download pipeline.
+With the README foundation in place, start with friendly error handling to reduce support burden. Then add preference persistence and overwrite safeguards, which improve everyday use without changing the core download pipeline.
