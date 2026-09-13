@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -114,6 +115,59 @@ class TestFetchInfoPlaylist:
         assert "title" in entry
         assert "url" in entry
         assert entry["url"].startswith("http")
+
+
+# =====================================================================
+# download_track — isolated filename collision tests
+# =====================================================================
+
+class TestDownloadTrackFilenames:
+    @pytest.mark.parametrize(
+        "filename, existing_stems, expected_stem",
+        [
+            ("Song", [], "Song"),
+            ("Song", ["Song"], "Song (2)"),
+            ("Song", ["Song", "Song (2)", "Song (3)"], "Song (4)"),
+            ("Song", ["Song", "Song (3)"], "Song (2)"),
+            ("Song", ["Song (2)"], "Song"),
+            ("So:ng?", ["Song"], "Song (2)"),
+            ("***", ["untitled"], "untitled (2)"),
+            ("a" * 201, ["a" * 200], "a" * 200 + " (2)"),
+        ],
+    )
+    def test_preserves_existing_mp3s(
+        self, tmp_path, filename, existing_stems, expected_stem
+    ):
+        from mutagen.id3 import ID3
+
+        originals = {}
+        for stem in existing_stems:
+            path = tmp_path / f"{stem}.mp3"
+            originals[path] = f"original audio for {stem}".encode()
+            path.write_bytes(originals[path])
+
+        def fake_download(urls):
+            assert urls == ["https://example.com/video"]
+            options = mock_ydl.call_args.args[0]
+            target = Path(options["outtmpl"].replace("%(ext)s", "mp3"))
+            target.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 417)
+
+        with patch.object(downloader.yt_dlp, "YoutubeDL") as mock_ydl, \
+             patch.object(downloader, "get_ffmpeg_path", return_value=None):
+            mock_ydl.return_value.__enter__.return_value.download.side_effect = fake_download
+            result = downloader.download_track(
+                "https://example.com/video", str(tmp_path), filename,
+                {"title": "New track"},
+            )
+
+        for path, original_bytes in originals.items():
+            assert path.read_bytes() == original_bytes
+        expected_path = tmp_path / f"{expected_stem}.mp3"
+        assert result == str(expected_path)
+        assert mock_ydl.call_args.args[0]["outtmpl"] == str(
+            tmp_path / f"{expected_stem}.%(ext)s"
+        )
+        assert str(ID3(result)["TIT2"]) == "New track"
 
 
 # =====================================================================
