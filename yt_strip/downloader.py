@@ -113,8 +113,13 @@ def download_track(url, output_dir, filename, metadata, progress_callback=None):
     os.makedirs(output_dir, exist_ok=True)
 
     safe = sanitize_filename(filename)
-    out_template = os.path.join(output_dir, f"{safe}.%(ext)s")
-    mp3_path = os.path.join(output_dir, f"{safe}.mp3")
+    stem = safe
+    suffix = 2
+    while os.path.exists(os.path.join(output_dir, f"{stem}.mp3")):
+        stem = f"{safe} ({suffix})"
+        suffix += 1
+    out_template = os.path.join(output_dir, f"{stem}.%(ext)s")
+    mp3_path = os.path.join(output_dir, f"{stem}.mp3")
 
     ffmpeg = get_ffmpeg_path()
 
