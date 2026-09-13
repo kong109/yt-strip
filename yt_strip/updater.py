@@ -12,6 +12,7 @@ import ssl
 import sys
 import zipfile
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -113,27 +114,33 @@ def update_ytdlp(progress_callback=None):
 
     cache_dir = get_cache_dir()
 
-    # Wipe previous cached version
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    if progress_callback:
-        progress_callback(f"Downloading yt-dlp {latest}...")
+    # Keep the working cache intact until the replacement is fully extracted.
+    with TemporaryDirectory(prefix=f"{cache_dir.name}-", dir=cache_dir.parent) as staging:
+        staging_dir = Path(staging)
+        if progress_callback:
+            progress_callback(f"Downloading yt-dlp {latest}...")
 
-    wheel_path = cache_dir / "yt_dlp.whl"
-    ctx = _ssl_context()
-    req = Request(wheel_url)
-    with urlopen(req, timeout=120, context=ctx) as resp:
-        wheel_path.write_bytes(resp.read())
+        wheel_path = staging_dir / "yt_dlp.whl"
+        ctx = _ssl_context()
+        req = Request(wheel_url)
+        with urlopen(req, timeout=120, context=ctx) as resp:
+            wheel_path.write_bytes(resp.read())
 
-    if progress_callback:
-        progress_callback("Installing...")
+        if progress_callback:
+            progress_callback("Installing...")
 
-    with zipfile.ZipFile(wheel_path) as zf:
-        zf.extractall(cache_dir)
+        with zipfile.ZipFile(wheel_path) as zf:
+            zf.extractall(staging_dir)
 
-    wheel_path.unlink()
+        if not (staging_dir / "yt_dlp" / "__init__.py").is_file():
+            raise RuntimeError("Invalid yt-dlp wheel: missing yt_dlp/__init__.py")
+
+        wheel_path.unlink()
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+        staging_dir.rename(cache_dir)
 
     # Make sure future imports in this process see the new version
     bootstrap()
