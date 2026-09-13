@@ -6,6 +6,7 @@ import sys
 import zipfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from urllib.error import URLError
 
 import pytest
 
@@ -133,6 +134,23 @@ class TestBootstrap:
 # =====================================================================
 
 class TestUpdateYtdlp:
+    @pytest.fixture
+    def working_cache(self, tmp_path, monkeypatch):
+        cache = tmp_path / "app" / "packages"
+        (cache / "yt_dlp").mkdir(parents=True)
+        (cache / "yt_dlp" / "__init__.py").write_bytes(b"# working yt-dlp\n")
+        (cache / "yt_dlp" / "version.py").write_bytes(b"__version__ = '2026.01.01'\n")
+        (cache / "old-only.txt").write_bytes(b"\x00old cache bytes\xff")
+        monkeypatch.setattr(updater, "get_cache_dir", lambda: cache)
+        monkeypatch.setattr(updater, "get_latest_version_info",
+                            lambda: ("9999.01.01", "https://fake/yt_dlp.whl"))
+        monkeypatch.setattr(sys, "path", sys.path.copy())
+        return cache
+
+    def _cache_bytes(self, cache):
+        return {path.relative_to(cache): path.read_bytes()
+                for path in cache.rglob("*") if path.is_file()}
+
     def _make_fake_wheel(self, path):
         """Create a minimal fake yt-dlp wheel zip for testing."""
         with zipfile.ZipFile(path, "w") as zf:
@@ -171,3 +189,78 @@ class TestUpdateYtdlp:
                           return_value=("9999.01.01", None)):
             with pytest.raises(RuntimeError, match="No pure-Python wheel"):
                 updater.update_ytdlp()
+
+    @pytest.mark.parametrize("failure", ["connection", "read", "bad_zip", "missing_init",
+                                         "extraction", "interrupted_extraction"])
+    def test_failed_update_preserves_cache(self, tmp_path, working_cache, failure):
+        original = self._cache_bytes(working_cache)
+        wheel = tmp_path / "fake.whl"
+        self._make_fake_wheel(wheel)
+        if failure == "missing_init":
+            with zipfile.ZipFile(wheel, "w") as zf:
+                zf.writestr("yt_dlp/version.py", "__version__ = '9999.01.01'")
+
+        def fail_extraction(zf, destination):
+            # Leave a partial extraction behind before failing.
+            zf.extract("yt_dlp/__init__.py", destination)
+            if failure == "interrupted_extraction":
+                raise KeyboardInterrupt("interrupted extraction")
+            raise OSError("extraction failed")
+
+        error = {
+            "connection": URLError, "read": URLError, "bad_zip": zipfile.BadZipFile,
+            "missing_init": RuntimeError, "extraction": OSError,
+            "interrupted_extraction": KeyboardInterrupt,
+        }[failure]
+        with patch.object(updater, "urlopen") as urlopen, \
+             patch.object(updater, "bootstrap") as bootstrap:
+            response = urlopen.return_value.__enter__.return_value
+            response.read.return_value = b"not a wheel" if failure == "bad_zip" else wheel.read_bytes()
+            if failure == "connection":
+                urlopen.side_effect = URLError("offline")
+            elif failure == "read":
+                response.read.side_effect = URLError("download interrupted")
+
+            if failure in ("extraction", "interrupted_extraction"):
+                with patch.object(zipfile.ZipFile, "extractall", fail_extraction):
+                    with pytest.raises(error):
+                        updater.update_ytdlp()
+            else:
+                with pytest.raises(error):
+                    updater.update_ytdlp()
+
+            bootstrap.assert_not_called()
+
+        assert self._cache_bytes(working_cache) == original
+        assert list(working_cache.parent.iterdir()) == [working_cache]
+
+    def test_successful_update_replaces_working_cache(self, tmp_path, working_cache):
+        original = self._cache_bytes(working_cache)
+        wheel = tmp_path / "fake.whl"
+        self._make_fake_wheel(wheel)
+        progress = []
+        extractall = zipfile.ZipFile.extractall
+
+        def check_staging(zf, destination):
+            assert self._cache_bytes(working_cache) == original
+            assert Path(destination).parent == working_cache.parent
+            assert Path(destination) != working_cache
+            extractall(zf, destination)
+
+        with patch.object(updater, "urlopen") as urlopen, \
+             patch.object(zipfile.ZipFile, "extractall", check_staging):
+            urlopen.return_value.__enter__.return_value.read.return_value = wheel.read_bytes()
+            result = updater.update_ytdlp(progress.append)
+
+        assert result == "9999.01.01"
+        assert self._cache_bytes(working_cache) == {
+            Path("yt_dlp/__init__.py"): b"",
+            Path("yt_dlp/version.py"): b"__version__ = '9999.01.01'",
+        }
+        assert list(working_cache.parent.iterdir()) == [working_cache]
+        assert str(working_cache) in sys.path
+        assert progress == [
+            "Downloading yt-dlp 9999.01.01...",
+            "Installing...",
+            "Updated to yt-dlp 9999.01.01 — restart app to use it",
+        ]
